@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: media-sequencer-backend
+    runtime: docker
+    dockerfilePath: backend/Dockerfile
+    dockerContext: backend
+    plan: free
+    region: oregon
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: DB_PATH
+        value: /data/sequencer.db
+      - key: FRONTEND_ORIGIN
+        value: "*"
+      - key: DEFAULT_SYNC_DURATION_SECONDS
+        value: "10"
+    disk:
+      name: sqlite-data
+      mountPath: /data
+      sizeGB: 1

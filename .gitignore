@@ -1,0 +1,21 @@
+# Go
+backend/server.exe
+backend/server
+backend/*.db
+backend/*.db-wal
+backend/*.db-shm
+*.exe
+*.db
+*.db-wal
+*.db-shm
+
+# Node
+node_modules/
+dist/
+.vite/
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
