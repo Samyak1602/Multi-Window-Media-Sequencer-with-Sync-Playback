@@ -1,11 +1,29 @@
 import type { WindowWithPlayback, SyncStatusResponse, AddMediaItemPayload, TriggerSyncPayload, MediaItem } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080').replace(/\/+$/, '');
+
+async function parseErrorMessage(res: Response, fallbackPrefix: string): Promise<string> {
+  try {
+    const text = await res.text();
+    if (!text) return `${fallbackPrefix} (HTTP ${res.status})`;
+    try {
+      const json = JSON.parse(text);
+      if (json.error) return json.error;
+      if (json.message) return json.message;
+    } catch {
+      return text;
+    }
+    return text;
+  } catch {
+    return `${fallbackPrefix} (HTTP ${res.status} ${res.statusText})`.trim();
+  }
+}
 
 export async function getWindows(): Promise<WindowWithPlayback[]> {
   const res = await fetch(`${API_BASE_URL}/api/windows`);
   if (!res.ok) {
-    throw new Error(`Failed to fetch windows: ${res.statusText}`);
+    const msg = await parseErrorMessage(res, 'Failed to fetch windows');
+    throw new Error(msg);
   }
   return res.json();
 }
@@ -13,7 +31,8 @@ export async function getWindows(): Promise<WindowWithPlayback[]> {
 export async function getSyncStatus(): Promise<SyncStatusResponse> {
   const res = await fetch(`${API_BASE_URL}/api/sync/status`);
   if (!res.ok) {
-    throw new Error(`Failed to fetch sync status: ${res.statusText}`);
+    const msg = await parseErrorMessage(res, 'Failed to fetch sync status');
+    throw new Error(msg);
   }
   return res.json();
 }
@@ -25,8 +44,8 @@ export async function addMediaItem(windowId: string, payload: AddMediaItemPayloa
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `Failed to add media item: ${res.statusText}`);
+    const msg = await parseErrorMessage(res, 'Failed to add media item');
+    throw new Error(msg);
   }
   return res.json();
 }
@@ -36,7 +55,8 @@ export async function deleteMediaItem(mediaId: string): Promise<void> {
     method: 'DELETE',
   });
   if (!res.ok) {
-    throw new Error(`Failed to delete media item: ${res.statusText}`);
+    const msg = await parseErrorMessage(res, 'Failed to delete media item');
+    throw new Error(msg);
   }
 }
 
@@ -47,8 +67,8 @@ export async function triggerSync(payload: TriggerSyncPayload): Promise<SyncStat
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `Failed to trigger sync: ${res.statusText}`);
+    const msg = await parseErrorMessage(res, 'Failed to trigger sync');
+    throw new Error(msg);
   }
   return res.json();
 }
@@ -58,6 +78,7 @@ export async function cancelSync(): Promise<void> {
     method: 'POST',
   });
   if (!res.ok) {
-    throw new Error(`Failed to cancel sync: ${res.statusText}`);
+    const msg = await parseErrorMessage(res, 'Failed to cancel sync');
+    throw new Error(msg);
   }
 }

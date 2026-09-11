@@ -59,6 +59,17 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
   const [positionOption, setPositionOption] = useState<'end' | 'index'>('end');
   const [orderIndex, setOrderIndex] = useState<number>(0);
 
+  // Sync selected window whenever modal opens or initialWindowId / windows update
+  React.useEffect(() => {
+    if (isOpen) {
+      if (initialWindowId) {
+        setSelectedWindowId(initialWindowId);
+      } else if (windows.length > 0) {
+        setSelectedWindowId(windows[0].id);
+      }
+    }
+  }, [isOpen, initialWindowId, windows]);
+
   if (!isOpen) return null;
 
   const currentWindow = windows.find((w) => w.id === selectedWindowId) || windows[0];
@@ -71,7 +82,8 @@ export const AddMediaModal: React.FC<AddMediaModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onAddMedia(selectedWindowId, {
+    const targetWinId = selectedWindowId || initialWindowId || (windows[0]?.id || 'win-1');
+    await onAddMedia(targetWinId, {
       type,
       url: type === 'blank' ? '' : url,
       duration_seconds: durationSeconds,
