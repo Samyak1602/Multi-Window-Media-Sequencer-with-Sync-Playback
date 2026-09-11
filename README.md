@@ -9,14 +9,22 @@ A high-performance full-stack application where multiple independent display win
 ### 1. Wall-Clock Derived Playback (Zero State Bookkeeping)
 Traditional media playback systems maintain stateful pointers, timers, or next-item queues, which are prone to drift, desynchronization across browser tabs, and complex pause/resume state corruption.
 
-In this architecture, at any moment $t$ (Unix timestamp in seconds), the currently playing media item is a **pure deterministic function of wall-clock time**:
-$$\text{elapsed} = (t - \text{cycle\_epoch}) \pmod{\text{cycle\_duration\_seconds}}$$
+In this architecture, at any moment `t` (Unix timestamp in seconds), the currently playing media item is a **pure deterministic function of wall-clock time**:
+
+```
+elapsed = (now_unix - cycle_epoch) % cycle_duration_seconds
+```
+
 where:
-- $\text{cycle\_epoch}$ is a fixed Unix timestamp set once at creation time and never resets during ordinary edits.
-- $\text{cycle\_duration\_seconds} = 18000\text{s}$ (5 hours).
+- `cycle_epoch` is a fixed Unix timestamp set once at creation time and never resets during ordinary edits.
+- `cycle_duration_seconds` = 18000s (5 hours).
 
 The sequencer sums the cumulative durations of playlist items to find:
-$$\text{playlist\_elapsed} = \text{elapsed} \pmod{\text{total\_playlist\_duration}}$$
+
+```
+playlist_elapsed = elapsed % total_playlist_duration
+```
+
 and iterates cumulative durations to find the exact item index, the second offset within that item, and the remaining time.
 
 ```
@@ -31,13 +39,13 @@ and iterates cumulative durations to find the exact item index, the second offse
 
 ### 2. 5-Hour Cycle Hard Reset Boundary
 Every exactly 18,000 seconds (5 hours), the cycle resets to offset 0 (the first item of the playlist), regardless of where the previous loop landed.
-- **Non-evenly dividing playlists**: If a playlist's total duration does not evenly divide 18,000s (e.g., 37s or 70s), at $t = 17,999\text{s}$ the player renders the item corresponding to $17,999 \pmod{\text{total\_duration}}$, and at $t = 18,000\text{s}$ it resets to item 0 at offset 0.
+- **Non-evenly dividing playlists**: If a playlist's total duration does not evenly divide 18,000s (e.g., 37s or 70s), at `t = 17,999s` the player renders the item corresponding to `17,999 % total_duration`, and at `t = 18,000s` it resets to item 0 at offset 0.
 
 ### 3. Stateless Global Sync Overrides & Zero-Drift Resumption
-When a sync event is triggered with duration $D$ starting at $T_{start}$:
-- While $t \in [T_{start}, T_{start} + D)$, every window displays the synchronized media item.
+When a sync event is triggered with duration `D` starting at `T_start`:
+- While `t >= T_start` and `t < T_start + D`, every window displays the synchronized media item.
 - The underlying natural wall-clock calculation continues advancing uninterrupted in the background.
-- At $t \ge T_{start} + D$, each window automatically resumes its natural sequence at the exact item and second it would naturally be at, requiring **zero explicit pause/resume bookkeeping**.
+- At `t >= T_start + D`, each window automatically resumes its natural sequence at the exact item and second it would naturally be at, requiring **zero explicit pause/resume bookkeeping**.
 - **Mid-Item Video Resumption**: When a window resumes a video mid-item, the video element initializes/seeks directly to the current offset (`video.currentTime = offset`) rather than restarting from 0.
 
 ### 4. Video Drift Correction Threshold
@@ -51,7 +59,7 @@ If a window has no media items (or total duration is 0), the sequencer emits a s
 
 ### 7. Playlist Edits & Timing Shifts
 When a media item is added or deleted from a window's playlist:
-- $\text{cycle\_epoch}$ remains **strictly unchanged** to prevent unexpected jump resets.
+- `cycle_epoch` remains **strictly unchanged** to prevent unexpected jump resets.
 - By design, inserting or removing an item modifies the cumulative timeline; subsequent items shift relative to wall-clock time according to the new sequence length.
 
 ---
@@ -228,7 +236,7 @@ docker-compose up --build
 ### 1. Backend Deployment: Render (Native Go Environment)
 Since our SQLite driver (`modernc.org/sqlite`) is pure Go with zero CGO dependencies, the backend deploys seamlessly on Render's native Go runtime:
 
-1. In the [Render Dashboard](https://dashboard.render.com), click **New +** $\rightarrow$ **Web Service**.
+1. In the [Render Dashboard](https://dashboard.render.com), click **New +** -> **Web Service**.
 2. Connect your GitHub repository.
 3. Configure the service:
    - **Name**: `media-sequencer-backend`
@@ -255,7 +263,7 @@ Since our SQLite driver (`modernc.org/sqlite`) is pure Go with zero CGO dependen
 ---
 
 ### 2. Frontend Deployment: Vercel / Netlify
-1. In [Vercel](https://vercel.com), click **Add New...** $\rightarrow$ **Project** and select your repository.
+1. In [Vercel](https://vercel.com), click **Add New...** -> **Project** and select your repository.
 2. Configure the build settings:
    - **Framework Preset**: **Vite**
    - **Root Directory**: `frontend`
