@@ -58,10 +58,10 @@ When a media item is added or deleted from a window's playlist:
 
 ## 🛠️ Tech Stack
 
-- **Backend**: Golang (`net/http`, RESTful JSON API)
+- **Backend**: Golang (`net/http`, RESTful JSON API, native Go buildpack on Render)
 - **Database**: SQLite with `modernc.org/sqlite` (Pure Go, 100% CGO-free, WAL mode)
-- **Frontend**: React 18, TypeScript, Vite, Lucide Icons, Vanilla CSS Design System
-- **Containerization**: Multi-stage Docker build
+- **Frontend**: React 18, TypeScript, Vite, Lucide Icons, Vanilla CSS Design System (hosted on Vercel / Netlify)
+- **Local Containerization**: Dockerfile & Docker Compose (available for local containerized development)
 
 ---
 
@@ -193,12 +193,12 @@ Immediately terminates the active sync broadcast, resuming natural sequences acr
 - **Node.js**: 18+ or 20+
 - **npm**: 9+
 
-### 1. Start the Go Backend
+### 1. Start the Go Backend (Native)
 ```bash
 cd backend
 go run ./cmd/server
 ```
-*The backend starts on `http://localhost:8080` and creates `sequencer.db` with auto-seeded windows.*
+*The backend starts on `http://localhost:8080` and creates `./sequencer.db` with auto-seeded windows.*
 
 To run the automated backend test suite:
 ```bash
@@ -214,41 +214,67 @@ npm run dev
 ```
 *The frontend starts on `http://localhost:5173`.*
 
----
-
-## 🐳 Docker & Production Deployment
-
-### 1. Running with Docker Compose
+### 3. Optional: Running via Docker locally
+The repo includes a `Dockerfile` and `docker-compose.yml` for containerized local workflows:
 ```bash
 docker-compose up --build
 ```
+*(Note: Docker is provided for local dev flexibility; the deployed backend runs natively on Render's Go environment).*
 
-### 2. Backend Deployment (Render / Fly.io / Railway)
-- **Runtime**: Docker (uses [`backend/Dockerfile`](file:///d:/Multi-Window%20Media%20Sequencer%20with%20Sync%20Playback/backend/Dockerfile))
-- **Environment Variables**:
-  | Variable | Default Value | Description |
-  |---|---|---|
-  | `PORT` | `8080` | Port for the HTTP server |
-  | `DB_PATH` | `/data/sequencer.db` | SQLite database file location |
-  | `FRONTEND_ORIGIN` | `*` | Allowed CORS origin (e.g. `https://your-frontend.vercel.app`) |
-  | `DEFAULT_SYNC_DURATION_SECONDS` | `10` | Default sync broadcast duration |
+---
 
-> **Note on Free-Tier Hosting**: When deployed on Render free tier, the service may spin down after 15 minutes of inactivity. The first request after spin-down may take ~30–50s to cold-start. SQLite data persists via Docker volumes.
+## 🌐 Production Deployment
 
-### 3. Frontend Deployment (Vercel / Netlify)
-- **Framework Preset**: Vite
-- **Build Command**: `npm run build`
-- **Output Directory**: `dist`
-- **Environment Variables**:
-  | Variable | Example Value | Description |
-  |---|---|---|
-  | `VITE_API_BASE_URL` | `https://your-backend.onrender.com` | Base URL of deployed Go backend |
+### 1. Backend Deployment: Render (Native Go Environment)
+Since our SQLite driver (`modernc.org/sqlite`) is pure Go with zero CGO dependencies, the backend deploys seamlessly on Render's native Go runtime:
+
+1. In the [Render Dashboard](https://dashboard.render.com), click **New +** $\rightarrow$ **Web Service**.
+2. Connect your GitHub repository.
+3. Configure the service:
+   - **Name**: `media-sequencer-backend`
+   - **Environment / Runtime**: **Go**
+   - **Root Directory**: `backend`
+   - **Build Command**: `go build -o app ./cmd/server`
+   - **Start Command**: `./app`
+   - **Instance Type**: **Free**
+4. Set Environment Variables:
+   | Key | Value | Description |
+   |---|---|---|
+   | `PORT` | `8080` | Port Render routes traffic to |
+   | `DB_PATH` | `./sequencer.db` | Relative SQLite database file path |
+   | `FRONTEND_ORIGIN` | `*` *(or your Vercel URL)* | Allowed CORS origin |
+   | `DEFAULT_SYNC_DURATION_SECONDS` | `10` | Default sync broadcast duration |
+5. Set **Health Check Path** to `/api/health`.
+6. Click **Create Web Service**.
+
+> [!NOTE]
+> **Render Free-Tier Ephemeral Filesystem & Cold Starts**:
+> 1. **Ephemeral Disk**: Render's free tier has an ephemeral filesystem without persistent disk attachments. When the free-tier service spins down after 15m of inactivity or restarts, the SQLite database re-seeds automatically upon startup to the clean seed dataset. This is a known hosting limitation of free tiers, not a bug.
+> 2. **Cold Start**: The first request after a spin-down may take ~30–50s to boot up. Subsequent requests respond instantly.
+
+---
+
+### 2. Frontend Deployment: Vercel / Netlify
+1. In [Vercel](https://vercel.com), click **Add New...** $\rightarrow$ **Project** and select your repository.
+2. Configure the build settings:
+   - **Framework Preset**: **Vite**
+   - **Root Directory**: `frontend`
+   - **Build Command**: `npm run build`
+   - **Output Directory**: `dist`
+3. Add Environment Variable:
+   | Key | Value |
+   |---|---|
+   | `VITE_API_BASE_URL` | `https://your-backend.onrender.com` *(your deployed Render backend URL)* |
+4. Click **Deploy**.
+
+> [!IMPORTANT]
+> **API Base URL Wiring**: Vite embeds `VITE_API_BASE_URL` into the production client bundle at build time. When your backend URL is set in Vercel/Netlify environment variables, ensure a build is triggered so the compiled JS bundle calls the live Render backend.
 
 ---
 
 ## 🧪 Verification & Testing Guide
 
-1. **Multi-Window Playback**: Open `http://localhost:5173` across multiple browser windows. Verify that all windows show synchronized clock headers and smooth item transitions.
-2. **Global Sync Override**: In the top control panel, click `🚨 Emergency Alert (10s)`. Verify all 3 windows immediately transition to the emergency video, display the broadcast countdown HUD, and simultaneously return to their natural loop positions without drift.
-3. **Mid-Item Video Resume**: Observe a window scheduled to play a video when sync ends; confirm the video element seeks directly to the current offset rather than frame 0.
-4. **Dynamic Playlist Edits**: Click `Add Media` on Window 1, select a sample preset, and submit. Verify that Window 1 updates its timeline immediately without resetting `cycle_epoch`.
+1. **Multi-Window Playback**: Open the deployed frontend URL across multiple browser tabs. Confirm that all tabs display synchronized clocks and identical item transitions.
+2. **Global Sync Override**: In the controller panel, click `🚨 Emergency Alert (10s)`. Confirm all windows immediately switch to the sync broadcast, show the countdown HUD, and simultaneously return to their natural loop positions without drift.
+3. **Mid-Item Video Resumption**: Observe a window scheduled to play a video when sync ends; confirm the video element seeks directly to the current offset rather than restarting from frame 0.
+4. **Dynamic Playlist Edits**: Click `Add Media` on any window, select a sample preset, and submit. Confirm the playlist updates live while preserving `cycle_epoch`.
